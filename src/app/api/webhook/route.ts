@@ -8,8 +8,21 @@ export async function GET(request: NextRequest) {
   const mode = searchParams.get("hub.mode");
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
+  const expected = process.env.WHATSAPP_VERIFY_TOKEN;
 
-  if (mode === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+  const match = mode === "subscribe" && token === expected;
+
+  // Temporary debug logging to diagnose verification failures. Safe to
+  // remove once webhook verification is confirmed working.
+  console.log("Webhook GET verify attempt:", {
+    mode,
+    match,
+    receivedTokenLength: token?.length ?? 0,
+    expectedTokenLength: expected?.length ?? 0,
+    expectedIsSet: !!expected,
+  });
+
+  if (match) {
     return new Response(challenge, { status: 200 });
   }
 
