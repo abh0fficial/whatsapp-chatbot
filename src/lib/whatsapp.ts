@@ -15,5 +15,17 @@ export async function sendWhatsAppMessage(to: string, body: string) {
       }),
     }
   );
-  return res.json();
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    // Surface the real Meta API error (bad token, unverified number, etc.)
+    // instead of silently swallowing it.
+    console.error("WhatsApp send error:", JSON.stringify(data));
+    throw new Error(
+      `WhatsApp API error (${res.status}): ${data?.error?.message || JSON.stringify(data)}`
+    );
+  }
+
+  return data;
 }
