@@ -48,18 +48,36 @@ export async function POST(request: NextRequest) {
 
   try {
     // Find or create conversation
-    let { data: conversation } = await supabase
+    let { data: conversation, error: findError } = await supabase
       .from("conversations")
       .select("*")
       .eq("phone", phone)
       .single();
 
+    // PGRST116 = "no rows found", which is expected for a brand-new phone
+    // number. Anything else is a real problem (missing table, bad key, etc.)
+    if (findError && findError.code !== "PGRST116") {
+      console.error("Webhook: failed to look up conversation:", findError);
+      return Response.json(
+        { error: "Supabase lookup failed", details: findError.message },
+        { status: 500 }
+      );
+    }
+
     if (!conversation) {
-      const { data: newConvo } = await supabase
+      const { data: newConvo, error: createError } = await supabase
         .from("conversations")
         .insert({ phone, name })
         .select()
         .single();
+
+      if (createError) {
+        console.error("Webhook: failed to create conversation:", createError);
+        return Response.json(
+          { error: "Supabase insert failed", details: createError.message },
+          { status: 500 }
+        );
+      }
       conversation = newConvo;
     } else if (name && name !== conversation.name) {
       await supabase
@@ -83,6 +101,14 @@ export async function POST(request: NextRequest) {
     if (insertError?.code === "23505") {
       // Duplicate message, ignore
       return Response.json({ status: "duplicate" });
+    }
+
+    if (insertError) {
+      console.error("Webhook: failed to store user message:", insertError);
+      return Response.json(
+        { error: "Supabase message insert failed", details: insertError.message },
+        { status: 500 }
+      );
     }
 
     // Update conversation timestamp
@@ -130,7 +156,8 @@ export async function POST(request: NextRequest) {
 
     return Response.json({ status: "replied" });
   } catch (error) {
-    console.error("Webhook error:", error);
-    return Response.json({ status: "error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Webhook error:", message, error);
+    return Response.json({ status: "error", error: message }, { status: 500 });
   }
 }
